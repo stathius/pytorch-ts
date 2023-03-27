@@ -6,31 +6,36 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
-from gluonts.dataset.field_names import FieldName
-from gluonts.dataset.repository._util import metadata, save_to_file
+from gluonts.dataset import DatasetWriter
+from gluonts.dataset.common import MetaData, TrainDatasets
+# from gluonts.dataset.field_names import FieldName
+# from gluonts.dataset.repository._util import metadata
 from gluonts.time_feature.holiday import squared_exponential_kernel
-from pts.feature import CustomDateFeatureSet
 
+from pts.feature import CustomDateFeatureSet
 
 def generate_pts_m5_dataset(
     dataset_path: Path,
     pandas_freq: str,
-    prediction_length: int = 28,
-    alpha: float = 0.5,
+    prediction_length: int,
+    alpha: float,
+    m5_file_path: Path,
+    dataset_writer: DatasetWriter,
 ):
-    cal_path = f"{dataset_path}/calendar.csv"
-    sales_path = f"{dataset_path}/sales_train_validation.csv"
-    sales_test_path = f"{dataset_path}/sales_train_evaluation.csv"
-    sell_prices_path = f"{dataset_path}/sell_prices.csv"
+    cal_path = f"{m5_file_path}/calendar.csv"
+    sales_path = f"{m5_file_path}/sales_train_validation.csv"
+    sales_test_path = f"{m5_file_path}/sales_train_evaluation.csv"
+    sell_prices_path = f"{m5_file_path}/sell_prices.csv"
 
+    print(cal_path)
     if not os.path.exists(cal_path) or not os.path.exists(sales_path):
         raise RuntimeError(
             f"M5 data is available on Kaggle (https://www.kaggle.com/c/m5-forecasting-accuracy/data). "
             f"You first need to agree to the terms of the competition before being able to download the data. "
-            f"After you have done that, please copy the files into {dataset_path}."
+            f"After you have done that, please copy the files into {m5_file_path}."
         )
 
-    # Read M5 data from dataset_path
+    # Read M5 data from m5_file_path
     calendar = pd.read_csv(cal_path, parse_dates=True)
     calendar.sort_index(inplace=True)
     calendar.date = pd.to_datetime(calendar.date)
@@ -134,7 +139,6 @@ def generate_pts_m5_dataset(
     ]
 
     # Build training set
-    train_file = dataset_path / "train" / "data.json"
     train_ds = []
     for index, item in sales_train_validation.iterrows():
         id, item_id, dept_id, cat_id, store_id, state_id = index
@@ -181,27 +185,7 @@ def generate_pts_m5_dataset(
 
         train_ds.append(time_series.copy())
 
-    # Build training set
-    train_file = dataset_path / "train" / "data.json"
-    save_to_file(train_file, train_ds)
-
-    # Create metadata file
-    meta_file = dataset_path / "metadata.json"
-    with open(meta_file, "w") as f:
-        f.write(
-            json.dumps(
-                {
-                    "freq": pandas_freq,
-                    "prediction_length": prediction_length,
-                    "feat_static_cat": feat_static_cat,
-                    "feat_dynamic_real": feat_dynamic_real,
-                    "cardinality": len(train_ds),
-                }
-            )
-        )
-
     # Build testing set
-    test_file = dataset_path / "test" / "data.json"
     test_ds = []
     for index, item in sales_train_evaluation.iterrows():
         id, item_id, dept_id, cat_id, store_id, state_id = index
@@ -248,4 +232,16 @@ def generate_pts_m5_dataset(
 
         test_ds.append(time_series.copy())
 
-    save_to_file(test_file, test_ds)
+
+    meta = MetaData(**{"freq": pandas_freq,
+                    "prediction_length": prediction_length,
+                    "feat_static_cat": feat_static_cat,
+                    "feat_dynamic_real": feat_dynamic_real,
+                    "cardinality": len(train_ds)
+                })
+
+    dataset = TrainDatasets(metadata=meta, train=train_ds, test=test_ds)
+    return dataset
+    dataset.save(
+        path_str=str(dataset_path), writer=dataset_writer, overwrite=True
+    )
