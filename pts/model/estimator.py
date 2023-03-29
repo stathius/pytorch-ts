@@ -104,8 +104,7 @@ class PyTorchEstimator(Estimator):
 
         input_names = get_module_forward_input_names(trained_net)
 
-        with env._let(max_idle_transforms=maybe_len(training_data) or 0):
-            training_instance_splitter = self.create_instance_splitter("training")
+        training_instance_splitter = self.create_instance_splitter("training")
         training_iter_dataset = TransformedIterableDataset(
             dataset=training_data,
             transform=transformation
@@ -128,8 +127,7 @@ class PyTorchEstimator(Estimator):
 
         validation_data_loader = None
         if validation_data is not None:
-            with env._let(max_idle_transforms=maybe_len(validation_data) or 0):
-                validation_instance_splitter = self.create_instance_splitter("validation")
+            validation_instance_splitter = self.create_instance_splitter("validation")
             validation_iter_dataset = TransformedIterableDataset(
                 dataset=validation_data,
                 transform=transformation
